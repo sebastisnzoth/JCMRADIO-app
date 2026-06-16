@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* Waveform bars */
+@keyframes waveBar {
+  0%,100% { transform:scaleY(.12); opacity:.4; }
+  50%      { transform:scaleY(1);   opacity:1;  }
+}
+
+/* iOS/Android notch safe areas */
+.pt-safe { padding-top: env(safe-area-inset-top, 16px); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }

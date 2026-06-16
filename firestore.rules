@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: config
+    // Document ID: main
+    // Fields:
+    //   - splashAd: map (enabled: bool, imageUrl: string, duration: int)
+    //   - stickyBanner: map (imageUrl: string, link: string)
+    //   - tvLink: string
+    //   - socialLinks: map (whatsapp: string, instagram: string, tiktok: string, facebook: string)
+    //   - popupAlert: map (enabled: bool, title: string, message: string)
+    //
+    // Collection: notifications
+    // Document ID: {notificationId}
+    // Fields:
+    //   - title: string
+    //   - body: string
+    //   - sentAt: string (ISO 8601)
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - email: string
+    //   - role: string (enum: ['admin'])
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email in get(/databases/$(database)/documents/config/main).data.authorizedAdmins ||
+          (request.auth.token.email == "sebastianzoth@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidConfig(data) {
+      return data.keys().hasAll(['splashAd', 'stickyBanner', 'tvLink', 'socialLinks', 'authorizedAdmins']) &&
+             data.splashAd.enabled is bool &&
+             data.splashAd.imageUrl is string &&
+             data.splashAd.duration is int &&
+             data.stickyBanner.imageUrl is string &&
+             data.stickyBanner.link is string &&
+             data.tvLink is string &&
+             data.socialLinks.whatsapp is string &&
+             data.authorizedAdmins is list;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['title', 'body', 'sentAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.body is string && data.body.size() > 0 && data.body.size() < 500 &&
+             data.sentAt is string;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['message', 'senderName', 'createdAt', 'uid']) &&
+             data.message is string && data.message.size() > 0 && data.message.size() < 500 &&
+             data.senderName is string && data.senderName.size() > 0 && data.senderName.size() < 50 &&
+             data.createdAt is timestamp &&
+             data.uid is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /config/main {
+      allow read: if true; // App needs to read config even if not logged in
+      allow write: if isAdmin() && isValidConfig(request.resource.data);
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidNotification(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /chat/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidChatMessage(request.resource.data) && request.resource.data.uid == request.auth.uid;
+    }
+  }
+}
