@@ -1,0 +1,78 @@
+name: Build AAB para Google Play
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Código ──────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js + build del frontend ───────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build frontend (Vite)
+        run: npm run build
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      # ── 3. Capacitor sync ──────────────────────────────────
+      - name: Sincronizar Capacitor → Android
+        run: npx cap sync android
+
+      # ── 4. Java 17 ────────────────────────────────────────
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      # ── 5. Keystore desde secrets ─────────────────────────
+      - name: Decodificar keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/jcmradio.keystore
+
+      # ── 6. Build AAB firmado ───────────────────────────────
+      - name: Build Release AAB
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/jcmradio.keystore \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      # ── 7. Subir el AAB como artefacto ────────────────────
+      - name: Subir AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: jcmradio-release-${{ github.run_number }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      # ── 8. Info del build ──────────────────────────────────
+      - name: Resumen
+        run: |
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          SIZE=$(du -sh $AAB | cut -f1)
+          echo "## ✅ AAB generado" >> $GITHUB_STEP_SUMMARY
+          echo "- **Archivo:** app-release.aab" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tamaño:** $SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "- **App ID:** com.jcmradiorock.app" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Descarga el AAB desde la pestaña **Artifacts** de este workflow." >> $GITHUB_STEP_SUMMARY
