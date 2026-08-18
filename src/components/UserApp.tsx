@@ -7,6 +7,7 @@ import {
   Facebook,
   History,
   Instagram,
+  MessageCircle,
   Pause,
   Play,
   Radio,
@@ -24,9 +25,9 @@ type PlayerState = 'idle' | 'loading' | 'playing' | 'error';
 interface RadioInfo {
   title: string;
   art: string;
-  listeners: number;
-  ulistener: number;
-  bitrate: number;
+  listeners: number | string;
+  ulistener: number | string;
+  bitrate: number | string;
   djusername: string;
   djprofile: string;
   history: string[];
@@ -44,7 +45,23 @@ const fallbackConfig = {
     duration: 0,
     imageUrl: '',
   },
+  stickyBanner: { imageUrl: '', link: '' },
+  tvLink: '',
+  quickLinks: [],
+  authorizedAdmins: [],
 } as AppConfig;
+
+function cleanText(value?: string) {
+  if (!value) return '';
+  return value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/^[\s\uFEFF\u200B]*\d+\s*[.)-]+\s*/u, '')
+    .replace(/[\uFEFF\u200B\u200C\u200D]/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function TikTokIcon({ size = 22 }: { size?: number }) {
   return (
@@ -75,7 +92,7 @@ export default function UserApp() {
       const data = (await response.json()) as RadioInfo;
       setRadioInfo(data);
     } catch {
-      // The live stream remains usable even when metadata is temporarily unavailable.
+      // El audio continúa disponible aunque los metadatos fallen temporalmente.
     } finally {
       setInfoLoading(false);
     }
@@ -87,14 +104,16 @@ export default function UserApp() {
     return () => window.clearInterval(interval);
   }, [loadRadioInfo]);
 
+  const currentTitle = cleanText(radioInfo?.title) || 'JCM Radio - transmisión en vivo';
+
   useEffect(() => {
-    if (!radioInfo?.title) {
+    if (!currentTitle || currentTitle === 'JCM Radio - transmisión en vivo') {
       setAlbumArt(null);
       return;
     }
 
     const controller = new AbortController();
-    fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(radioInfo.title)}&media=music&entity=song&limit=1`, { signal: controller.signal })
+    fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(currentTitle)}&media=music&entity=song&limit=1`, { signal: controller.signal })
       .then((res) => res.json())
       .then((data) => {
         const art = data?.results?.[0]?.artworkUrl100;
@@ -103,7 +122,7 @@ export default function UserApp() {
       .catch(() => setAlbumArt(null));
 
     return () => controller.abort();
-  }, [radioInfo?.title]);
+  }, [currentTitle]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -117,10 +136,7 @@ export default function UserApp() {
           setCountdown(Math.max(0, data.splashAd.duration || 0));
         }
       },
-      (error) => {
-        // Configuration is optional for the core radio experience.
-        handleFirestoreError(error, OperationType.GET, 'config/main');
-      },
+      (error) => handleFirestoreError(error, OperationType.GET, 'config/main'),
     );
     return () => unsubscribe();
   }, []);
@@ -153,6 +169,22 @@ export default function UserApp() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTitle,
+        artist: 'JCM Radio',
+        album: 'Rock On Line',
+        artwork: (albumArt || radioInfo?.art)
+          ? [{ src: albumArt || radioInfo?.art || '', sizes: '512x512' }]
+          : undefined,
+      });
+    } catch {
+      // Algunos WebViews no implementan MediaMetadata por completo.
+    }
+  }, [currentTitle, albumArt, radioInfo?.art]);
+
   const togglePlay = useCallback(async () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -164,8 +196,10 @@ export default function UserApp() {
 
     try {
       setPlayerState('loading');
-      audio.src = STREAM_URL;
-      audio.load();
+      if (!audio.src) {
+        audio.src = STREAM_URL;
+        audio.load();
+      }
       await audio.play();
     } catch {
       setPlayerState('error');
@@ -204,14 +238,14 @@ export default function UserApp() {
   const handleShare = async () => {
     const payload = {
       title: 'JCM Radio - Rock',
-      text: 'Escuchá JCM Radio - Rock en vivo.',
+      text: `Escuchá JCM Radio - Rock en vivo. Ahora suena: ${currentTitle}`,
       url: window.location.origin,
     };
     try {
       if (navigator.share) await navigator.share(payload);
       else await navigator.clipboard.writeText(window.location.origin);
     } catch {
-      // User cancelled share or clipboard is unavailable.
+      // El usuario puede cancelar el diálogo de compartir.
     }
   };
 
@@ -222,12 +256,18 @@ export default function UserApp() {
 
   const isPlaying = playerState === 'playing';
   const cover = albumArt || radioInfo?.art || '';
-  const history = radioInfo?.history?.filter(Boolean).slice(0, 8) || [];
+  const djName = cleanText(radioInfo?.djusername);
+  const showDj = Boolean(djName && !/^no\s*dj$/i.test(djName));
+  const listeners = Number(radioInfo?.listeners ?? 0) || 0;
+  const bitrate = Number(radioInfo?.bitrate ?? 0) || 0;
+  const history = (radioInfo?.history || [])
+    .map(cleanText)
+    .filter((track, index, list) => Boolean(track) && list.indexOf(track) === index)
+    .slice(0, 10);
 
   return (
     <div className="min-h-screen bg-[#050506] text-white relative overflow-x-hidden">
       <audio ref={audioRef} preload="none" playsInline />
-
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_0%,rgba(185,28,28,.18),transparent_38%),linear-gradient(to_bottom,#0b0b0d,#050506_55%)]" />
 
       <AnimatePresence>
@@ -259,7 +299,7 @@ export default function UserApp() {
         <section className="rounded-[30px] border border-white/10 bg-[#0e0e11]/95 overflow-hidden shadow-2xl">
           <div className="relative aspect-square max-h-[430px] bg-gradient-to-br from-red-950/40 to-black flex items-center justify-center overflow-hidden">
             {cover ? (
-              <img src={cover} alt={radioInfo?.title || 'JCM Radio'} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <img src={cover} alt={currentTitle} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
               <div className="text-center">
                 <Radio size={74} className="mx-auto text-red-500 mb-4" />
@@ -278,9 +318,9 @@ export default function UserApp() {
             <div className="text-center min-h-[58px]">
               <p className="text-xs uppercase tracking-[.22em] text-red-400 font-bold mb-2">Ahora suena</p>
               <h2 className="text-lg sm:text-xl font-bold leading-snug break-words">
-                {infoLoading && !radioInfo ? 'Actualizando información…' : radioInfo?.title || 'JCM Radio - transmisión en vivo'}
+                {infoLoading && !radioInfo ? 'Actualizando información…' : currentTitle}
               </h2>
-              {radioInfo?.djusername && <p className="text-xs text-white/45 mt-1">DJ: {radioInfo.djusername}</p>}
+              {showDj && <p className="text-xs text-white/45 mt-1">DJ: {djName}</p>}
             </div>
 
             <div className="flex items-center justify-center">
@@ -316,16 +356,21 @@ export default function UserApp() {
               <input aria-label="Volumen" type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={(e) => handleVolume(Number(e.target.value))} className="w-full accent-red-600" />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="rounded-2xl bg-white/[.035] border border-white/[.06] p-4">
                 <Users size={18} className="text-red-400 mb-2" />
-                <p className="text-xl font-bold">{radioInfo?.listeners ?? '—'}</p>
-                <p className="text-[11px] text-white/40">Oyentes ahora</p>
+                <p className="text-xl font-bold">{listeners || '—'}</p>
+                <p className="text-[11px] text-white/40">Oyentes</p>
+              </div>
+              <div className="rounded-2xl bg-white/[.035] border border-white/[.06] p-4">
+                <Radio size={18} className="text-red-400 mb-2" />
+                <p className="text-xl font-bold">{bitrate || '—'}</p>
+                <p className="text-[11px] text-white/40">kbps</p>
               </div>
               <button onClick={loadRadioInfo} className="text-left rounded-2xl bg-white/[.035] border border-white/[.06] p-4 active:scale-[.98]">
                 <RefreshCw size={18} className="text-red-400 mb-2" />
                 <p className="text-sm font-bold">Actualizar</p>
-                <p className="text-[11px] text-white/40">Canción y estado</p>
+                <p className="text-[11px] text-white/40">Estado</p>
               </button>
             </div>
           </div>
@@ -339,13 +384,15 @@ export default function UserApp() {
           <AnimatePresence initial={false}>
             {historyOpen && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                <div className="px-5 pb-5 space-y-2">
+                <div className="px-5 pb-5">
                   {history.length ? history.map((track, index) => (
-                    <div key={`${track}-${index}`} className="flex gap-3 py-2 border-t border-white/[.06]">
-                      <span className="text-xs text-white/25 w-5">{index + 1}</span>
-                      <span className="text-sm text-white/70">{track}</span>
+                    <div key={`${track}-${index}`} className="flex gap-3 py-3 border-t border-white/[.06]">
+                      <span className="text-xs text-white/25 w-5 pt-0.5">{index + 1}</span>
+                      <span className="text-sm text-white/70 leading-snug">{track}</span>
                     </div>
-                  )) : <p className="text-sm text-white/40 py-2">El historial aparecerá cuando el servidor lo informe.</p>}
+                  )) : (
+                    <p className="text-sm text-white/40 border-t border-white/[.06] pt-4">El historial se actualizará automáticamente cuando esté disponible.</p>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -355,22 +402,40 @@ export default function UserApp() {
         <section className="rounded-3xl border border-white/10 bg-[#0e0e11]/90 p-5">
           <h3 className="font-bold text-lg">JCM Radio - Rock</h3>
           <p className="text-sm text-white/55 leading-relaxed mt-2">
-            Radio online de rock con transmisión en vivo. Escuchá la programación desde el teléfono, consultá qué está sonando y compartí la radio con tus contactos.
+            Radio online con programación musical, clásicos del rock y contenidos especiales. Escuchá la transmisión en vivo y consultá lo que está sonando desde la aplicación.
           </p>
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-[#0e0e11]/90 p-5">
-          <h3 className="font-bold mb-4">Seguinos y contactanos</h3>
-          <div className="flex flex-wrap gap-3">
-            {config.socialLinks?.instagram && <a href={config.socialLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="social-button"><Instagram size={21} /></a>}
-            {config.socialLinks?.facebook && <a href={config.socialLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="social-button"><Facebook size={21} /></a>}
-            {config.socialLinks?.tiktok && <a href={config.socialLinks.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="social-button"><TikTokIcon /></a>}
-            {config.socialLinks?.whatsapp && <button onClick={openWhatsApp} className="rounded-full border border-white/10 bg-white/[.05] px-4 h-11 text-sm font-bold">WhatsApp</button>}
-            {!config.socialLinks?.instagram && !config.socialLinks?.facebook && !config.socialLinks?.tiktok && !config.socialLinks?.whatsapp && <p className="text-sm text-white/40">Escuchá JCM Radio y compartila desde el botón superior.</p>}
-          </div>
+        <section className="grid grid-cols-2 gap-3">
+          <button onClick={handleShare} className="rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 flex items-center justify-center gap-2 font-semibold active:scale-[.98]">
+            <Share2 size={18} /> Compartir
+          </button>
+          {config.socialLinks?.whatsapp ? (
+            <button onClick={openWhatsApp} className="rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 flex items-center justify-center gap-2 font-semibold active:scale-[.98]">
+              <MessageCircle size={18} /> WhatsApp
+            </button>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/[.025] px-4 py-4 flex items-center justify-center gap-2 text-white/35">
+              <Radio size={18} /> 24/7 online
+            </div>
+          )}
         </section>
 
-        <p className="text-center text-[11px] text-white/25 pt-2">JCM Radio · Streaming en vivo</p>
+        <div className="flex justify-center gap-4 pt-2">
+          {config.socialLinks?.instagram && (
+            <a href={config.socialLinks.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="w-12 h-12 rounded-full border border-white/10 bg-white/[.04] flex items-center justify-center"><Instagram size={22} /></a>
+          )}
+          {config.socialLinks?.facebook && (
+            <a href={config.socialLinks.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="w-12 h-12 rounded-full border border-white/10 bg-white/[.04] flex items-center justify-center"><Facebook size={22} /></a>
+          )}
+          {config.socialLinks?.tiktok && (
+            <a href={config.socialLinks.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="w-12 h-12 rounded-full border border-white/10 bg-white/[.04] flex items-center justify-center"><TikTokIcon /></a>
+          )}
+        </div>
+
+        <footer className="text-center pt-2 pb-4">
+          <p className="text-[10px] uppercase tracking-[.2em] text-white/25">JCM Radio · Rock On Line</p>
+        </footer>
       </main>
     </div>
   );
