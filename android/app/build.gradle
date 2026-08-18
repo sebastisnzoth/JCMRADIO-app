@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.jcmradiorock.app"
+    namespace = "com.app.jcmradiorock"
     compileSdk = rootProject.ext.compileSdkVersion
 
     compileOptions {
@@ -10,7 +10,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.jcmradiorock.app"
+        applicationId "com.app.jcmradiorock"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
