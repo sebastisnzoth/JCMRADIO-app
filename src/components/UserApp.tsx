@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 
 const STREAM_URL = 'https://sp.aljania.com/8120/stream';
+const WHATSAPP_NUMBER = '51940925284';
+const WHATSAPP_MESSAGE = 'Hola JCM Radio, quiero pedir una canción:';
 
 type PlayerState = 'idle' | 'loading' | 'playing' | 'error';
 
@@ -250,8 +252,8 @@ export default function UserApp() {
   };
 
   const openWhatsApp = () => {
-    const number = config.socialLinks?.whatsapp?.replace(/\D/g, '');
-    if (number) window.open(`https://wa.me/${number}`, '_blank', 'noopener,noreferrer');
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const isPlaying = playerState === 'playing';
@@ -410,15 +412,9 @@ export default function UserApp() {
           <button onClick={handleShare} className="rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 flex items-center justify-center gap-2 font-semibold active:scale-[.98]">
             <Share2 size={18} /> Compartir
           </button>
-          {config.socialLinks?.whatsapp ? (
-            <button onClick={openWhatsApp} className="rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 flex items-center justify-center gap-2 font-semibold active:scale-[.98]">
-              <MessageCircle size={18} /> WhatsApp
-            </button>
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-white/[.025] px-4 py-4 flex items-center justify-center gap-2 text-white/35">
-              <Radio size={18} /> 24/7 online
-            </div>
-          )}
+          <button onClick={openWhatsApp} className="rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 flex items-center justify-center gap-2 font-semibold active:scale-[.98]">
+            <MessageCircle size={18} /> WhatsApp
+          </button>
         </section>
 
         <div className="flex justify-center gap-4 pt-2">
