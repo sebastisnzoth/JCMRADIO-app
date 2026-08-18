@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.jcmradiorock.app',
-  appName: 'JCMRadioRock',
+  appId: 'com.app.jcmradiorock',
+  appName: 'JCM Radio',
   webDir: 'dist'
 };
 
