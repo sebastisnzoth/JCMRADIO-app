@@ -36,11 +36,14 @@ jobs:
           java-version: 17
           distribution: temurin
 
+      - name: Setup Gradle 8.14.3
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
       - name: Build Release AAB sin firmar
         working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew bundleRelease
+        run: gradle bundleRelease
 
       - name: Subir AAB
         uses: actions/upload-artifact@v4
