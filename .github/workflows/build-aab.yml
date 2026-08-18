@@ -30,6 +30,16 @@ jobs:
       - name: Sincronizar Capacitor → Android
         run: npx cap sync android
 
+      - name: Reparar iconos Android dañados
+        run: |
+          for dir in android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi; do
+            if [ -f "$dir/ic_launcher.png" ]; then
+              cp "$dir/ic_launcher.png" "$dir/ic_launcher_round.png"
+              echo "Reparado: $dir/ic_launcher_round.png"
+            fi
+          done
+          file android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
+
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
