@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">TaskRabbit</string>
-    <string name="title_activity_main">TaskRabbit</string>
-    <string name="package_name">com.taskrabbit.app</string>
-    <string name="custom_url_scheme">com.taskrabbit.app</string>
+    <string name="app_name">JCM Radio</string>
+    <string name="title_activity_main">JCM Radio</string>
+    <string name="package_name">com.app.jcmradiorock</string>
+    <string name="custom_url_scheme">com.app.jcmradiorock</string>
 </resources>
