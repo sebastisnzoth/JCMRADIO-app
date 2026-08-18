@@ -66,7 +66,6 @@ jobs:
                           else:
                               rgba = (5, 5, 6, 255)
                       else:
-                          # Splash simple y profesional: fondo oscuro + centro rojo.
                           if d <= r2:
                               rgba = (185, 28, 28, 255)
                           elif d <= r1:
@@ -83,7 +82,6 @@ jobs:
                   chunk(b'IEND', b'')
               )
 
-          # Launcher icons: regenerate every density with valid PNG bytes.
           launcher_sizes = {
               'mipmap-mdpi': 48,
               'mipmap-hdpi': 72,
@@ -105,53 +103,41 @@ jobs:
                       f.write(data)
                   print('Regenerado:', target)
 
-          # Splash: overwrite ALL splash.png under res, including portrait/landscape
-          # and every density, so no corrupt legacy PNG can break AAPT2.
           splash_data = make_png(256, 256, 'splash')
-          splash_count = 0
           for root, dirs, files in os.walk(base):
               if 'splash.png' in files:
                   target = os.path.join(root, 'splash.png')
                   with open(target, 'wb') as f:
                       f.write(splash_data)
-                  splash_count += 1
                   print('Regenerado:', target)
 
-          # Ensure the generic drawable splash always exists and is valid.
           generic = os.path.join(base, 'drawable', 'splash.png')
           os.makedirs(os.path.dirname(generic), exist_ok=True)
           with open(generic, 'wb') as f:
               f.write(splash_data)
-          print('Splash regenerados:', splash_count)
 
-          # Validate PNG signatures for every Android PNG resource.
           bad = []
-          checked = 0
           for root, dirs, files in os.walk(base):
               for name in files:
                   if not name.lower().endswith('.png'):
                       continue
                   path = os.path.join(root, name)
-                  checked += 1
                   with open(path, 'rb') as f:
                       sig = f.read(8)
                   if sig != b'\x89PNG\r\n\x1a\n':
                       bad.append(path)
-          print('PNG validados:', checked)
           if bad:
               raise SystemExit('PNG inválidos restantes: ' + ', '.join(bad))
           PY
 
-          file android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-          file android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
-          file android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
-          file android/app/src/main/res/drawable/splash.png
-
-      - name: Setup Java 17
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
-          java-version: 17
+          java-version: 21
           distribution: temurin
+
+      - name: Verificar Java
+        run: java -version
 
       - name: Instalar Gradle 8.14.3 manualmente
         run: |
@@ -191,4 +177,5 @@ jobs:
           echo "- **Tamaño:** $SIZE" >> $GITHUB_STEP_SUMMARY
           echo "- **App ID:** com.app.jcmradiorock" >> $GITHUB_STEP_SUMMARY
           echo "- **Target SDK:** 36" >> $GITHUB_STEP_SUMMARY
+          echo "- **Java:** 21" >> $GITHUB_STEP_SUMMARY
           echo "- **Build:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
