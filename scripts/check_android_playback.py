@@ -16,6 +16,7 @@ def wait_for(probe, label, seconds=75):
             print(f"PASS {label}", flush=True)
             return
         time.sleep(2)
+    print(shell("dumpsys", "media_session")[:10000], flush=True)
     raise RuntimeError(f"Timed out waiting for {label}")
 
 def press_play():
@@ -53,7 +54,7 @@ try:
         time.sleep(5)
         assert session_playing() and foreground(), "Playback interrupted while asleep"
     print("PASS 30 seconds asleep with native playback active", flush=True)
-    shell("input", "keyevent", "KEYCODE_MEDIA_PAUSE")
+    shell("cmd", "media_session", "dispatch", "pause")
     wait_for(lambda: not session_playing(), "system pause")
     time.sleep(8)
     assert not session_playing(), "Playback restarted after pause"
