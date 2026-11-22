@@ -19,7 +19,9 @@ def wait_for(probe, label, seconds=75):
     raise RuntimeError(f"Timed out waiting for {label}")
 
 def press_play():
-    shell("uiautomator", "dump", "/sdcard/jcm-window.xml")
+    result = shell("uiautomator", "dump", "/sdcard/jcm-window.xml")
+    if "dumped to" not in result.lower():
+        return False
     root = ET.fromstring(shell("cat", "/sdcard/jcm-window.xml").strip())
     for node in root.iter("node"):
         if "Reproducir radio" in (node.get("content-desc"), node.get("text")):
@@ -38,6 +40,8 @@ def session_playing():
 def foreground():
     return "isForeground=true" in shell("dumpsys", "activity", "services", PACKAGE + "/com.app.jcmradiorock.RadioService")
 
+shell("input", "keyevent", "KEYCODE_WAKEUP")
+shell("wm", "dismiss-keyguard")
 shell("am", "start", "-W", "-n", PACKAGE + "/com.app.jcmradiorock.MainActivity")
 wait_for(press_play, "listener starts the station")
 wait_for(session_playing, "native session playing", 100)
