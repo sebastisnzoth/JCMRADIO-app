@@ -376,9 +376,9 @@ export default function UserApp() {
             <div className="flex items-center justify-center">
               <button
                 onClick={togglePlay}
-                aria-label={isPlaying ? 'Pausar radio' : 'Reproducir radio'}
+                aria-label={playerState === 'loading' ? 'Cancelar conexión' : isPlaying ? 'Pausar radio' : 'Reproducir radio'}
                 className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center shadow-[0_0_40px_rgba(220,38,38,.28)] active:scale-95 disabled:opacity-50"
-                disabled={playerState === 'loading'}
+                disabled={!onAndroid && playerState === 'loading'}
               >
                 {playerState === 'loading' ? (
                   <RefreshCw size={28} className="animate-spin" />
