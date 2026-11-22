@@ -1,3 +1,4 @@
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { db, OperationType, handleFirestoreError } from '../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -73,6 +74,15 @@ function TikTokIcon({ size = 22 }: { size?: number }) {
   );
 }
 
+const onAndroid = Capacitor.getPlatform() === 'android';
+const nativeRadio = registerPlugin<{
+  getState(): Promise<{ status: PlayerState }>;
+  play(): Promise<{ status: PlayerState }>;
+  pause(): Promise<{ status: PlayerState }>;
+  setVolume(options: { volume: number }): Promise<unknown>;
+  addListener(name: 'state', listener: (data: { status: PlayerState }) => void): Promise<PluginListenerHandle>;
+}>('JcmRadio');
+
 export default function UserApp() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [config, setConfig] = useState<AppConfig>(fallbackConfig);
@@ -85,6 +95,27 @@ export default function UserApp() {
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    if (!onAndroid) return;
+    let live = true;
+    const update = ({ status }: { status: PlayerState }) => { if (live) setPlayerState(status); };
+    const sync = () => {
+      if (!document.hidden) void nativeRadio.getState().then(update).catch(() => update({ status: 'error' }));
+    };
+    const listener = nativeRadio.addListener('state', update);
+    void listener.then(sync).catch(() => update({ status: 'error' }));
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      live = false;
+      document.removeEventListener('visibilitychange', sync);
+      void listener.then(handle => handle.remove()).catch(() => {});
+    };
+  }, []);
+
+  useEffect(() => {
+    if (onAndroid) void nativeRadio.setVolume({ volume: muted ? 0 : volume }).catch(() => setPlayerState('error'));
+  }, [volume, muted]);
 
   const loadRadioInfo = useCallback(async () => {
     try {
@@ -172,7 +203,7 @@ export default function UserApp() {
   }, []);
 
   useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
+    if (onAndroid || !('mediaSession' in navigator)) return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: currentTitle,
@@ -188,6 +219,15 @@ export default function UserApp() {
   }, [currentTitle, albumArt, radioInfo?.art]);
 
   const togglePlay = useCallback(async () => {
+    if (onAndroid) {
+      try {
+        if (playerState === 'playing' || playerState === 'loading') await nativeRadio.pause();
+        else await nativeRadio.play();
+      } catch {
+        setPlayerState('error');
+      }
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -209,6 +249,14 @@ export default function UserApp() {
   }, [playerState]);
 
   const retryStream = useCallback(async () => {
+    if (onAndroid) {
+      try {
+        await nativeRadio.play();
+      } catch {
+        setPlayerState('error');
+      }
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     try {
@@ -269,7 +317,7 @@ export default function UserApp() {
 
   return (
     <div className="min-h-screen bg-[#050506] text-white relative overflow-x-hidden">
-      <audio ref={audioRef} preload="none" playsInline />
+      {!onAndroid && <audio ref={audioRef} preload="none" playsInline />}
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_0%,rgba(185,28,28,.18),transparent_38%),linear-gradient(to_bottom,#0b0b0d,#050506_55%)]" />
 
       <AnimatePresence>
